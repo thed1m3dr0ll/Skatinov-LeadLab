@@ -46,6 +46,16 @@ class Settings(BaseSettings):
     # Логирование
     log_level: str = Field(default="INFO", validation_alias="LOG_LEVEL")
     
+    # Безопасность (для prod окружения)
+    secret_key: str = Field(
+        default="dev-secret-key-not-for-prod",
+        validation_alias="SECRET_KEY"
+    )
+    allowed_hosts: str = Field(
+        default="localhost,127.0.0.1",
+        validation_alias="ALLOWED_HOSTS"
+    )
+    
     class Config:
         # Файл .env будет читаться из корня проекта
         env_file = ".env.dev"
