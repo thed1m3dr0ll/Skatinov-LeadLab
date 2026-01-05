@@ -17,7 +17,8 @@ RUN pip install --no-cache-dir \
     "pydantic-settings>=2.12.0,<3.0.0" \
     "python-dotenv>=1.2.1,<2.0.0" \
     "sqlalchemy>=2.0.45,<3.0.0" \
-    "alembic>=1.17.2,<2.0.0"
+    "alembic>=1.17.2,<2.0.0" \
+    "psycopg2-binary>=2.9.9,<3.0.0"
 
 # Копирую весь проект внутрь контейнера
 COPY . /app
