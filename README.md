@@ -334,4 +334,225 @@ docker compose up -d --build
 ​
 
 - Настройки вынесены в переменные окружения, поэтому для будущих dev/test/prod‑профилей можно будет использовать ту же схему, просто меняя `.env` и не трогая код приложения.
+  
+---
+
+### ⚙️ Каркас FastAPI (core, middleware, CORS, health)
+
+На этом этапе я собрал основу backend‑приложения на FastAPI поверх уже готовой конфигурации, моделей, миграций и Docker‑стенда.
 ​
+
+**📁 Структура backend‑каркаса**​
+```
+Skatinov-LeadLab
+├── app/
+│   ├── main.py          # Точка входа FastAPI-приложения (create_app)
+│   ├── api/
+│   │   ├── __init__.py  # Пакет для HTTP-эндпоинтов
+│   │   └── v1/
+│   │       ├── __init__.py  # Пакет API v1
+│   │       ├── api.py       # Корневой роутер /api/v1/*
+│   │       └── health.py    # Базовый health-check сервиса
+│   └── config/
+│       └── settings.py  # Pydantic Settings (используется в create_app)
+```
+
+
+**🚀 Инициализация FastAPI‑приложения**
+
+Я создал фабрику `create_app()` в `app/main.py`, которая отвечает за сборку всего приложения: конфиг, middleware и подключение версионированных роутеров.
+
+
+```python
+# app/main.py
+
+import time
+import logging
+
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
+
+from app.api.v1 import api_router as api_v1_router
+from app.config.settings import settings  # Pydantic Settings
+
+
+logger = logging.getLogger("skatinov_leadlab")
+
+
+def create_app() -> FastAPI:
+    """
+    Фабрика приложения FastAPI.
+
+    Здесь я:
+    - подтягиваю конфигурацию из settings,
+    - регистрирую middleware (логирование, CORS),
+    - подключаю версионированные роутеры /api/v1/*.
+    """
+    app = FastAPI(
+        title="Skatinov LeadLab",
+        version=getattr(settings, "APP_VERSION", "0.1.0"),
+        description=getattr(
+            settings,
+            "APP_DESCRIPTION",
+            "Серьёзный FastAPI‑проект для лидогенерации.",
+        ),
+        debug=getattr(settings, "DEBUG", True),
+    )
+
+    # ---------- Middleware логирования ----------
+
+    @app.middleware("http")
+    async def log_requests(request: Request, call_next):
+        """
+        Простое HTTP‑middleware для логирования.
+
+        Я логирую:
+        - метод и путь запроса,
+        - код ответа,
+        - время обработки.
+
+        Тела запросов и ответов не читаю, чтобы не светить секреты и не замедлять обработку.
+        """
+        start_time = time.time()
+        try:
+            response = await call_next(request)
+        except Exception as exc:
+            process_time = time.time() - start_time
+            logger.exception(
+                "Unhandled error: %s %s (%.3f s)",
+                request.method,
+                request.url.path,
+                process_time,
+            )
+            return JSONResponse(
+                status_code=500,
+                content={"detail": "Internal server error"},
+            )
+
+        process_time = time.time() - start_time
+        logger.info(
+            "%s %s -> %s (%.3f s)",
+            request.method,
+            request.url.path,
+            response.status_code,
+            process_time,
+        )
+        return response
+
+    # ---------- CORS для фронтенда ----------
+
+    allowed_origins = [
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+    ]
+
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=allowed_origins,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
+    # ---------- Роутеры ----------
+
+    # Подключаю роутер версии API v1 с префиксом /api/v1
+    app.include_router(api_v1_router, prefix="/api/v1")
+
+    return app
+
+
+# Экземпляр приложения, который будет запускать Uvicorn
+app = create_app()
+```
+
+
+**📡 Версионирование API и health‑check**
+
+Я ввёл явный слой версии `v1`: общий роутер лежит в `app/api/v1/api.py`, а базовый health‑чек вынесен в отдельный модуль `health.py`.
+
+
+```python
+# app/api/v1/api.py
+
+from fastapi import APIRouter
+
+from .health import router as health_router
+
+api_router = APIRouter()
+
+# Подключаю модуль health под /health
+api_router.include_router(health_router, prefix="/health", tags=["health"])
+```
+
+
+```python
+# app/api/v1/health.py
+
+from fastapi import APIRouter
+
+router = APIRouter()
+
+
+@router.get("", summary="Базовый health-check сервиса")
+async def health_root():
+    """
+    Простейший health‑эндпоинт.
+
+    Здесь я проверяю только то, что приложение запущено
+    и отвечает на HTTP‑запросы. Позже добавлю проверки БД и брокера.
+    """
+    return {
+        "status": "ok",
+        "service": "skatinov-leadlab",
+        "details": "base app is up",
+    }
+```
+
+
+
+В результате из Docker‑стенда доступен эндпоинт:
+
+- `GET http://localhost:8000/api/v1/health` → `{"status": "ok", "service": "skatinov-leadlab", "details": "base app is up"}`.
+​
+
+**🐳 Docker: обновлённый образ backend**
+
+Я доработал `Dockerfile`, чтобы backend‑контейнер собирался с нужными библиотеками (FastAPI, Uvicorn, Pydantic Settings, SQLAlchemy, Alembic) и запускал именно `app.main:app`.
+
+```
+# Базовый Dockerfile для backend Skatinov LeadLab
+FROM python:3.12-slim
+
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+ && rm -rf /var/lib/apt/lists/*
+
+# Устанавливаю зависимости проекта напрямую через pip
+RUN pip install --no-cache-dir \
+    fastapi \
+    uvicorn \
+    "pydantic-settings>=2.12.0,<3.0.0" \
+    "python-dotenv>=1.2.1,<2.0.0" \
+    "sqlalchemy>=2.0.45,<3.0.0" \
+    "alembic>=1.17.2,<2.0.0"
+
+# Копирую весь проект внутрь контейнера
+COPY . /app
+
+EXPOSE 8000
+
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+```
+
+
+Backend теперь собирается и запускается одной командой:
+```
+docker compose up --build
+```
+
+
+и сразу отдаёт `200 OK` на `/api/v1/health` из контейнера.
