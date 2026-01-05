@@ -14,3 +14,4 @@ dist/
 build/
 .pytest_cache/
 skatinov_dev.db
+.env.docker

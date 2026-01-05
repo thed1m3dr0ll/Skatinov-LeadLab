@@ -1,0 +1,91 @@
+# Docker-стенд для Skatinov LeadLab
+# Файл .env лежит в корне рядом с docker-compose.yml и хранит:
+# POSTGRES_* и RABBITMQ_* переменные для всех сервисов.
+# Запуск в фоне: docker compose up -d
+
+services:
+  postgres:
+    # Сервис базы данных Postgres — хранит все данные о лидах
+    image: postgres:16
+    container_name: skatinov_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    ports:
+      - "5432:5432"  # Доступ с хоста для миграций Alembic и отладки
+    volumes:
+      - postgres_data:/var/lib/postgresql/data  # Том для сохранения данных БД
+    networks:
+      - leadlab_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  rabbitmq:
+    # Брокер RabbitMQ для очередей задач, с веб-панелью на порту 15672
+    image: rabbitmq:3-management
+    container_name: skatinov_rabbitmq
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD}
+    ports:
+      - "5672:5672"                 # Порт для подключения backend (AMQP)
+      - "${RABBITMQ_ADMIN_PORT}:15672"  # Веб-интерфейс http://localhost:15672
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    networks:
+      - leadlab_network
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  backend:
+    # Бэкенд-сервис FastAPI — пока заглушка, но уже подключён к сети и зависит от БД и брокера
+    build:
+      context: .          # Dockerfile будет в корне проекта
+      dockerfile: Dockerfile
+    container_name: skatinov_backend
+    restart: unless-stopped
+    environment:
+      # Параметры БД
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: ${POSTGRES_PORT}
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:${POSTGRES_PORT}/${POSTGRES_DB}
+      # Параметры RabbitMQ
+      RABBITMQ_USER: ${RABBITMQ_USER}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD}
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: ${RABBITMQ_PORT}
+      RABBITMQ_ADMIN_PORT: ${RABBITMQ_ADMIN_PORT}
+      RABBITMQ_URL: amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:${RABBITMQ_PORT}/
+    ports:
+      - "8000:8000"       # API будет доступен по http://localhost:8000
+    volumes:
+      - .:/app            # В dev-режиме код монтируется из текущей папки
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - leadlab_network
+
+# Объявление томов для сохранения данных Postgres и RabbitMQ
+volumes:
+  postgres_data:
+  rabbitmq_data:
+
+# Общая сеть для всех сервисов
+networks:
+  leadlab_network:
+    driver: bridge
