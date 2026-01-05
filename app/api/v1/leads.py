@@ -2,8 +2,6 @@
 
 """Маршруты FastAPI для работы с лидами (CRUD)."""
 
-from uuid import UUID
-
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
@@ -50,7 +48,7 @@ def list_leads_endpoint(
     response_model=LeadOut,
     summary="Получить лид по ID",
 )
-def get_lead_endpoint(lead_id: UUID, db: Session = Depends(get_db)):
+def get_lead_endpoint(lead_id: int, db: Session = Depends(get_db)):
     """Эндпоинт для получения одного лида по его ID."""
     lead = get_lead(db=db, lead_id=lead_id)
     if not lead:
@@ -64,7 +62,7 @@ def get_lead_endpoint(lead_id: UUID, db: Session = Depends(get_db)):
     summary="Полное обновление лида по ID",
 )
 def update_lead_put_endpoint(
-    lead_id: UUID,
+    lead_id: int,
     lead_update: LeadUpdate,
     db: Session = Depends(get_db),
 ):
@@ -81,7 +79,7 @@ def update_lead_put_endpoint(
     summary="Частичное обновление лида по ID",
 )
 def update_lead_patch_endpoint(
-    lead_id: UUID,
+    lead_id: int,
     lead_update: LeadUpdate,
     db: Session = Depends(get_db),
 ):
@@ -97,7 +95,7 @@ def update_lead_patch_endpoint(
     status_code=status.HTTP_204_NO_CONTENT,
     summary="Удалить (временно — физически) лида по ID",
 )
-def delete_lead_endpoint(lead_id: UUID, db: Session = Depends(get_db)):
+def delete_lead_endpoint(lead_id: int, db: Session = Depends(get_db)):
     """Эндпоинт для удаления лида по ID (пока без мягкого удаления)."""
     deleted = delete_lead(db=db, lead_id=lead_id)
     if not deleted:

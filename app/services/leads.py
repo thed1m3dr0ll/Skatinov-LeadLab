@@ -3,12 +3,11 @@
 """Сервисы для CRUD операций с лидами — бизнес-логика."""
 
 from typing import Optional
-from uuid import UUID
 
 from sqlalchemy import select, func
 from sqlalchemy.orm import Session
 
-from app.models import Lead  # модель лида
+from app.models.lead import Lead  # модель лида
 from app.schemas.leads import LeadCreate, LeadUpdate, LeadOut, LeadList
 
 
@@ -21,7 +20,7 @@ def create_lead(db: Session, lead_in: LeadCreate) -> LeadOut:
     return LeadOut.model_validate(db_lead)
 
 
-def get_lead(db: Session, lead_id: UUID) -> Optional[LeadOut]:
+def get_lead(db: Session, lead_id: int) -> Optional[LeadOut]:
     """Получить лид по ID."""
     stmt = select(Lead).where(Lead.id == lead_id)
     db_lead = db.scalar(stmt)
@@ -42,7 +41,7 @@ def get_leads(db: Session, skip: int = 0, limit: int = 100) -> LeadList:
     return LeadList(leads=leads_out, total=total)
 
 
-def update_lead(db: Session, lead_id: UUID, lead_update: LeadUpdate) -> Optional[LeadOut]:
+def update_lead(db: Session, lead_id: int, lead_update: LeadUpdate) -> Optional[LeadOut]:
     """Обновить данные лида по ID."""
     stmt = select(Lead).where(Lead.id == lead_id)
     db_lead = db.scalar(stmt)
@@ -59,7 +58,7 @@ def update_lead(db: Session, lead_id: UUID, lead_update: LeadUpdate) -> Optional
     return LeadOut.model_validate(db_lead)
 
 
-def delete_lead(db: Session, lead_id: UUID) -> bool:
+def delete_lead(db: Session, lead_id: int) -> bool:
     """Пока просто физически удаляем лида по ID (позже сделаем мягкое удаление)."""
     stmt = select(Lead).where(Lead.id == lead_id)
     db_lead = db.scalar(stmt)
