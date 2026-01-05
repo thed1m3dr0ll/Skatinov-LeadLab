@@ -7,7 +7,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from app.db.session import get_db  # зависимость для получения сессии БД
+from app.db.database import get_db  # зависимость для получения сессии БД
 from app.schemas.leads import LeadCreate, LeadUpdate, LeadOut, LeadList
 from app.services.leads import (
     create_lead,
