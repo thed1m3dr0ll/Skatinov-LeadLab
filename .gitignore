@@ -13,3 +13,4 @@ __pycache__/
 dist/
 build/
 .pytest_cache/
+skatinov_dev.db
