@@ -21,5 +21,4 @@ COPY . /app
 EXPOSE 8000
 
 # Команда по умолчанию: запускаем uvicorn с приложением app.main:app
-# Позже можно заменить на запуск через твою структуру (например, app.api.main:app)
-CMD ["uvicorn", "app.api.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
